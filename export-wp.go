@@ -138,11 +138,36 @@ func main() {
 			if err != nil {
 				log.Fatalf("could not create file: %v", err)
 			}
-			defer f.Close()
-			defer f.Sync()
 			err = it.toMarkdown(f)
 			if err != nil {
 				log.Println("could not write post: ", err)
+			}
+			err = f.Sync()
+			if err != nil {
+				log.Println("could not flush file: ", err)
+			}
+			err = f.Close()
+			if err != nil {
+				log.Println("could not close file: ", err)
+			}
+
+			if len(it.Comments) > 0 {
+				f, err := os.Create(filepath.Join(OUTPUT_PATH, k, name, "comments.html"))
+				if err != nil {
+					log.Fatalf("could not create file: %v", err)
+				}
+				err = commentsToHTML(f, it.Comments)
+				if err != nil {
+					log.Println("ayyyyssss", err)
+				}
+				err = f.Sync()
+				if err != nil {
+					log.Println("could not flush file: ", err)
+				}
+				err = f.Close()
+				if err != nil {
+					log.Println("could not close file: ", err)
+				}
 			}
 		}
 	}
@@ -186,4 +211,30 @@ slug: "{{.Slug}}"
 		return err
 	}
 	return t.Execute(writer, d)
+}
+
+func commentsToHTML(writer io.Writer, comments []comment) error {
+
+	var tt template.Template
+	t, err := tt.Parse(`
+	<li>
+	<div>
+		<span>{{.AuthorName}}</span>
+		<span>{{.Id}} < {{.ParentId}}</span>
+		<div>
+		{{.Content}}
+		</div>
+	</div>
+	</li>`)
+	if err != nil {
+		log.Fatalf("bad template: %v", err)
+	}
+
+	for _, cm := range comments {
+		err = t.Execute(writer, cm)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
