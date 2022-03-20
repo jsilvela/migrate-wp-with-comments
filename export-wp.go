@@ -3,169 +3,187 @@ package main
 import (
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
+	"text/template"
 	"time"
 )
 
 const (
-	WORDPRESS_XML_FILE_PATH = "foo.xml" // "plazamoyuacom.wordpress.2022-03-07.000.xml"
-	OUTPUT_PATH             = "export2"
+	WORDPRESS_XML_FILE_PATH = "plazamoyuacom.wordpress.2022-03-07.000.xml" // "foo.xml"
+	OUTPUT_PATH             = "export3"
 	ORIGINAL_DOMAIN         = "https://plazamoyua.com"
 )
 
 type rss struct {
 	XMLName xml.Name `xml:"rss"`
-	Items   []Item   `xml:"channel>item"`
+	Items   []item   `xml:"channel>item"`
 }
 
-type Author struct {
-	XMLName xml.Name `xml:"wp:author"`
-	// 	<wp:author_id>14109008</wp:author_id>
-	// 	<wp:author_login>lbouza</wp:author_login>
-	// 	<wp:author_email>lbouza@telefonica.net</wp:author_email>
-	// 	<wp:author_display_name><![CDATA[Luis Bouza-Brey]]></wp:author_display_name>
-	// 	<wp:author_first_name><![CDATA[Luis]]></wp:author_first_name>
-	// 	<wp:author_last_name><![CDATA[Bouza-Brey]]></wp:author_last_name>
-	//
+// item is the place where posts, pages and attachments are represented
+type item struct {
+	XMLName       xml.Name
+	Title         string    `xml:"title"`
+	Link          string    `xml:"link"`
+	PubDate       string    `xml:"pubDate"`
+	Author        string    `xml:"creator"`       // space: dc
+	PostDate      string    `xml:"post_date"`     // space: wp
+	Slug          string    `xml:"post_name"`     // space: wp
+	PostDateGMT   string    `xml:"post_date_gmt"` // space: wp
+	Encodeds      []encoded `xml:"encoded"`       // space: content
+	PostMeta      postMeta  `xml:"postmeta"`
+	Comments      []comment `xml:"comment"`
+	ID            int       `xml:"post_id"`
+	CommentStatus string    `xml:"comment_status"`
+	PostParent    int       `xml:"post_parent"`
+	PostType      string    `xml:"post_type"`
 }
 
-// type Title struct {
-// 	XMLName xml.Name `xml:"title"`
-// }
-
-// type Link struct {
-// 	XMLName xml.Name `xml:"link"`
-// }
-
-// type description struct {
-// 	XMLName xml.Name `xml:"description"`
-// }
-
-// type pubDate struct {
-// 	XMLName xml.Name `xml:"pubDate"`
-// }
-
-// type language struct {
-// 	XMLName xml.Name `xml:"language"`
-// }
-
-// type wxrVersion struct {
-// 	XMLName xml.Name `xml:"wp:wxr_version"`
-// }
-
-// type wpBaseSiteUrl struct {
-// 	XMLName xml.Name `xml:"wp:base_site_url"`
-// }
-
-// type wpBaseBlogUrl struct {
-// 	XMLName xml.Name `xml:"wp:base_blog_url"`
-// }
-
-// class Post
-//   attr_accessor :title, :post_date, :created_at, :slug, :url, :content, :textile_content
-//   attr_accessor :hpricot_element
-
-// class Comment
-//   attr_accessor :author_name, :author_email, :author_url, :content, :post, :id, :parent_id
-
-// our struct which contains the complete
-// array of all Users in the file
-type Item struct {
-	XMLName     xml.Name `xml:"item"`
-	Title       string   `xml:"title"`
-	Link        string   `xml:"link"`
-	PubDate     string   `xml:"pubDate"`
-	Author      string   `xml:"creator"`   // space: dc
-	PostDate    string   `xml:"post_date"` // space: wp
-	CreatedAt   time.Time
-	Slug        string `xml:"post_name"`     // space: wp
-	PostDateGMT string `xml:"post_date_gmt"` // space: wp
-	// Encodeds    []content `xml:">encoded"`
-	Encodeds []encoded `xml:"encoded"` // space: content
-	// Excerpt     content `xml:"excerpt:encoded"` // space: excerpt
-	PostMeta postMeta
-	// Description content // space: description
-}
-
+// encoded represents the payload of an Item - may be content/excerpt
 type encoded struct {
 	XMLName xml.Name
 	Data    string `xml:",cdata"`
 }
 
 type postMeta struct {
-	XMLName   xml.Name `xml:"postmeta"` // namespace: wp
-	MetaKey   string   `xml:"meta_key"`
-	MetaValue metaValue
+	XMLName   xml.Name
+	MetaKey   string    `xml:"meta_key"`
+	MetaValue metaValue `xml:"meta_value"`
 }
 
 type metaValue struct {
-	XMLName xml.Name `xml:"meta_value"`
-	Value   string   `xml:",cdata"`
+	XMLName xml.Name
+	Value   string `xml:",cdata"`
 }
 
-// type creator struct {
-// 	XMLName xml.Name `xml:"creator"`
-// 	Content string
-// }
-
-type Comment struct {
-	PostUrl     string
-	AuthorName  string `xml:"wp:comment_author"`
-	AuthorEmail string `xml:"wp:comment_author_email"`
-	AuthorURL   string `xml:"wp:comment_author_url"`
-	Content     string `xml:"wp:comment_content"`
-	Id          string `xml:"wp:comment_id"`
-	ParentId    string `xml:"wp:comment_parent"`
-
-	CommentDate string `xml:"wp:comment_date_gmt"`
-	CreatedAt   time.Time
-	XMLName     xml.Name `xml:"wp:comment"`
+// comment represents a comment on the site, not an XML comment
+type comment struct {
+	XMLName        xml.Name
+	AuthorName     string `xml:"comment_author"`
+	AuthorEmail    string `xml:"comment_author_email"`
+	AuthorURL      string `xml:"comment_author_url"`
+	Content        string `xml:"comment_content"`
+	Id             int    `xml:"comment_id"`
+	ParentId       int    `xml:"comment_parent"`
+	CommentDate    string `xml:"comment_date"`
+	CommentDateGMT string `xml:"comment_date_gmt"`
+	CreatedAt      time.Time
 }
 
 func main() {
 
 	// Open our xmlFile
 	xmlFile, err := os.Open(WORDPRESS_XML_FILE_PATH)
-	// if we os.Open returns an error then handle it
 	if err != nil {
 		log.Fatalf("could not open file: %v", err)
 	}
 
-	fmt.Println("Successfully Opened file")
-	// defer the closing of our xmlFile so that we can parse it later on
+	fmt.Println("Successfully opened:", WORDPRESS_XML_FILE_PATH)
 	defer xmlFile.Close()
 
-	// read our opened xmlFile as a byte array.
 	byteValue, err := ioutil.ReadAll(xmlFile)
 	if err != nil {
 		log.Fatalf("could not read xml: %v", err)
 	}
 
-	// we initialize our Users array
 	var doc rss
-	// we unmarshal our byteArray which contains our
-	// xmlFiles content into 'users' which we defined above
 	err = xml.Unmarshal(byteValue, &doc)
 	if err != nil {
-		log.Fatalf("could not read xml: %v", err)
+		log.Fatalf("could not parse xml: %v", err)
 	}
 
 	fmt.Println("read items:", len(doc.Items))
-	// fmt.Printf("read stuff: %#v\n", doc)
 
-	// we iterate through every user within our users array and
-	// print out the user Type, their name, and their facebook url
-	// as just an example
-	for i := 0; i < len(doc.Items); i++ {
-		fmt.Println("title: " + doc.Items[i].Title)
-		fmt.Printf("%#v\n", doc.Items[i])
+	itemsByKind := make(map[string][]item)
+
+	for _, it := range doc.Items {
+		_, found := itemsByKind[it.PostType]
+		if !found {
+			itemsByKind[it.PostType] = make([]item, 0)
+		}
+		itemsByKind[it.PostType] = append(itemsByKind[it.PostType], it)
 	}
 
-	// out, err := xml.Marshal(doc)
-	// if err != nil {
-	// 	log.Fatalf("could not marshal out: %v", err)
-	// }
-	// fmt.Println(string(out))
+	for k, items := range itemsByKind {
+		if k == "attachment" {
+			continue
+		}
+		fmt.Println(k, len(items))
+		err := os.Mkdir(filepath.Join(OUTPUT_PATH, k), 0750)
+		if err != nil {
+			log.Fatalf("could not create dir: %v", err)
+		}
+		fmt.Println("created dir", filepath.Join(OUTPUT_PATH, k))
+		for _, it := range items {
+			if len(it.Slug) == 0 {
+				continue
+			}
+			name := it.Slug
+			if k == "post" {
+				dt, err := time.Parse("2006-01-02 15:04:05", it.PostDate)
+				if err == nil {
+					name = fmt.Sprintf("%s/%s", dt.Format("2006/01/02"), it.Slug)
+				}
+			}
+			err = os.MkdirAll(filepath.Join(OUTPUT_PATH, k, name), 0750)
+			if err != nil {
+				log.Fatalf("could not create dir: %v", err)
+			}
+			fmt.Println("created dir", filepath.Join(OUTPUT_PATH, k, name))
+
+			f, err := os.Create(filepath.Join(OUTPUT_PATH, k, name, "index.md"))
+			if err != nil {
+				log.Fatalf("could not create file: %v", err)
+			}
+			defer f.Close()
+			defer f.Sync()
+			err = it.toMarkdown(f)
+			if err != nil {
+				log.Println("could not write post: ", err)
+			}
+		}
+	}
+}
+
+func (i item) toMarkdown(writer io.Writer) error {
+	var content string
+	for _, enc := range i.Encodeds {
+		if enc.XMLName.Space == "http://purl.org/rss/1.0/modules/content/" {
+			content = enc.Data
+		}
+	}
+
+	var tt template.Template
+
+	d := struct {
+		Title   string
+		PubDate string
+		Author  string
+		Content string
+		Slug    string
+	}{
+		Title:   i.Title,
+		PubDate: i.PubDate,
+		Author:  i.Author,
+		Content: content,
+		Slug:    i.Slug,
+	}
+
+	t, err := tt.Parse(`
+---
+title: "{{.Title | html}}"
+date: "{{.PubDate}}"
+author: "{{.Author}}"
+slug: "{{.Slug}}"
+---
+
+{{.Content}}`)
+
+	if err != nil {
+		return err
+	}
+	return t.Execute(writer, d)
 }

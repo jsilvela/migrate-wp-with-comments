@@ -1,6 +1,8 @@
 *.xml
 export/
 export2/
+export3/
+foobar/
 output/
 output2/
 output3/
