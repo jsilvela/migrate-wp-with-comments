@@ -39,8 +39,8 @@ func Test_parseXML(t *testing.T) {
 		log.Fatalf("could not parse xml: %v", err)
 	}
 
-	if len(doc.Items) != 3 {
-		t.Errorf("expected to find 3 items, found %d", len(doc.Items))
+	if len(doc.Items) != 4 {
+		t.Errorf("expected to find 4 items, found %d", len(doc.Items))
 		t.FailNow()
 	}
 
@@ -61,6 +61,39 @@ func Test_parseXML(t *testing.T) {
 	}
 }
 
+func Test_cleanContent(t *testing.T) {
+	// http://www.europapress.es/madrid/noticia-ciudadanos-cerca-acuerdo-valia-merino-encabece-lista-ayuntamiento-cerrara-mikel-buesa-20110307173526.html
+	var doc rss
+	err := xml.Unmarshal([]byte(testXML), &doc)
+	if err != nil {
+		log.Fatalf("could not parse xml: %v", err)
+	}
+
+	if len(doc.Items) != 4 {
+		t.Errorf("expected to find 4 items, found %d", len(doc.Items))
+		t.FailNow()
+	}
+
+	renderer := contentRenderer{
+		transformContent: substituteMediaRoot,
+	}
+
+	var buff bytes.Buffer
+	err = renderer.toMarkdown(doc.Items[0], &buff)
+	if err != nil {
+		t.Errorf("could not convert post to markdown: %v", err)
+	}
+	md := buff.String()
+	if strings.Contains(md, "plazamoyua") {
+		t.Errorf("should have eliminated media url reference")
+	}
+	if !strings.Contains(md, "http://localhost:1313/media/2007/01/moyua6.jpg") {
+		t.Errorf("should have eliminated media url reference")
+	}
+	// http://plazamoyua.files.wordpress.com/2007/01/moyua6.jpg
+	t.Log(md)
+}
+
 func Test_generateMD(t *testing.T) {
 	var doc rss
 	err := xml.Unmarshal([]byte(testXML), &doc)
@@ -68,13 +101,17 @@ func Test_generateMD(t *testing.T) {
 		log.Fatalf("could not parse xml: %v", err)
 	}
 
-	if len(doc.Items) != 3 {
-		t.Errorf("expected to find 3 items, found %d", len(doc.Items))
+	if len(doc.Items) != 4 {
+		t.Errorf("expected to find 4 items, found %d", len(doc.Items))
 		t.FailNow()
 	}
 
+	renderer := contentRenderer{
+		transformContent: func(in string) string { return in },
+	}
+
 	var buff bytes.Buffer
-	err = doc.Items[2].toMarkdown(&buff)
+	err = renderer.toMarkdown(doc.Items[2], &buff)
 	if err != nil {
 		t.Errorf("could not convert post to markdown: %v", err)
 	}
@@ -90,6 +127,36 @@ func Test_generateMD(t *testing.T) {
 	}
 }
 
+func Test_generateHTMLinMD(t *testing.T) {
+	var doc rss
+	err := xml.Unmarshal([]byte(testXML), &doc)
+	if err != nil {
+		log.Fatalf("could not parse xml: %v", err)
+	}
+
+	if len(doc.Items) != 4 {
+		t.Errorf("expected to find 4 items, found %d", len(doc.Items))
+		t.FailNow()
+	}
+
+	renderer := contentRenderer{
+		transformContent: func(in string) string { return in },
+	}
+
+	var buff bytes.Buffer
+	err = renderer.toMarkdown(doc.Items[3], &buff)
+	if err != nil {
+		t.Errorf("could not convert post to markdown: %v", err)
+	}
+
+	md := buff.String()
+	if !strings.Contains(md, `"Las plataformas de hielo de la Antártida, estables. Lástima por los \"fans\" de Wilkins."`) {
+		t.Errorf("escaped HTML is unnecessary:")
+	}
+
+	t.Log(md)
+}
+
 func Test_threadComments(t *testing.T) {
 	var doc rss
 	err := xml.Unmarshal([]byte(testXML), &doc)
@@ -97,8 +164,8 @@ func Test_threadComments(t *testing.T) {
 		log.Fatalf("could not parse xml: %v", err)
 	}
 
-	if len(doc.Items) != 3 {
-		t.Errorf("expected to find 3 items, found %d", len(doc.Items))
+	if len(doc.Items) != 4 {
+		t.Errorf("expected to find 4 items, found %d", len(doc.Items))
 		t.FailNow()
 	}
 
@@ -113,8 +180,8 @@ func Test_threadComments(t *testing.T) {
 		t.FailNow()
 	}
 
-	if commentThreads[0].Id != commentThreads[0].Children[0].ParentId ||
-		commentThreads[0].Children[0].Id != commentThreads[0].Children[0].Children[0].ParentId {
+	if commentThreads[0].ID != commentThreads[0].Children[0].ParentID ||
+		commentThreads[0].Children[0].ID != commentThreads[0].Children[0].Children[0].ParentID {
 		t.Errorf("unexpected thread %v", commentThreads[0])
 	}
 }
@@ -126,8 +193,8 @@ func Test_renderComments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(doc.Items) != 3 {
-		t.Fatal("expected to find 3 items")
+	if len(doc.Items) != 4 {
+		t.Fatal("expected to find 4 items")
 	}
 
 	comments := doc.Items[2].Comments
@@ -137,7 +204,11 @@ func Test_renderComments(t *testing.T) {
 
 	commentThreads := threadComments(comments)
 
-	html, err := threadToHTML(commentThreads[0])
+	renderer := contentRenderer{
+		transformContent: func(in string) string { return in },
+	}
+
+	html, err := renderer.threadToHTML(commentThreads[0])
 	if err != nil {
 		t.Fatal(err)
 	}

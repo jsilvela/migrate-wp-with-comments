@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"html/template"
 	"io"
@@ -10,15 +11,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	textTpl "text/template"
 	"time"
-)
-
-const (
-	WORDPRESS_XML_FILE_PATH = "plazamoyuacom.wordpress.2022-03-07.000.xml" // "foo.xml"
-	OUTPUT_PATH             = "export3"
-	ORIGINAL_DOMAIN         = "https://plazamoyua.com"
-	FILES                   = "http://plazamoyua.files.wordpress.com/"
 )
 
 type rss struct {
@@ -71,8 +66,8 @@ type comment struct {
 	AuthorEmail    string        `xml:"comment_author_email"`
 	AuthorURL      string        `xml:"comment_author_url"`
 	Content        template.HTML `xml:"comment_content"`
-	Id             int           `xml:"comment_id"`
-	ParentId       int           `xml:"comment_parent"`
+	ID             int           `xml:"comment_id"`
+	ParentID       int           `xml:"comment_parent"`
 	CommentDate    string        `xml:"comment_date"`
 	CommentDateGMT string        `xml:"comment_date_gmt"`
 	CreatedAt      time.Time
@@ -86,14 +81,29 @@ type commentThread struct {
 }
 
 func main() {
+	var (
+		outdir, xmlFilename string
+		localMedia          string // the url for media the WP site served itself
+	)
 
-	// Open our xmlFile
-	xmlFile, err := os.Open(WORDPRESS_XML_FILE_PATH)
-	if err != nil {
-		log.Fatalf("could not open file: %v", err)
+	flag.StringVar(&outdir, "outdir", "", "name of the output directory")
+	flag.StringVar(&xmlFilename, "xmlfile", "", "name of the input XML file")
+	flag.StringVar(&localMedia, "localmedia", "", "url of the local media section")
+	flag.Parse()
+
+	fmt.Println("flags:", outdir, xmlFilename)
+
+	if len(outdir) == 0 || len(xmlFilename) == 0 {
+		log.Fatalf("flags missing")
 	}
 
-	fmt.Println("Successfully opened:", WORDPRESS_XML_FILE_PATH)
+	// Open our xmlFile
+	xmlFile, err := os.Open(xmlFilename)
+	if err != nil {
+		log.Fatalf("could not open file %s: %v", xmlFilename, err)
+	}
+
+	fmt.Println("Successfully opened:", xmlFilename)
 	defer xmlFile.Close()
 
 	byteValue, err := ioutil.ReadAll(xmlFile)
@@ -105,6 +115,10 @@ func main() {
 	err = xml.Unmarshal(byteValue, &doc)
 	if err != nil {
 		log.Fatalf("could not parse xml: %v", err)
+	}
+
+	renderer := contentRenderer{
+		transformContent: substituteMediaRoot,
 	}
 
 	fmt.Println("read items:", len(doc.Items))
@@ -120,15 +134,15 @@ func main() {
 	}
 
 	for k, items := range itemsByKind {
-		if k == "attachment" {
-			continue
-		}
+		// if k == "attachment" {
+		// 	continue
+		// }
 		fmt.Println(k, len(items))
-		err := os.Mkdir(filepath.Join(OUTPUT_PATH, k), 0750)
+		err := os.Mkdir(filepath.Join(outdir, k), 0750)
 		if err != nil {
 			log.Fatalf("could not create dir: %v", err)
 		}
-		fmt.Println("created dir", filepath.Join(OUTPUT_PATH, k))
+		fmt.Println("created dir", filepath.Join(outdir, k))
 		for _, it := range items {
 			if len(it.Slug) == 0 {
 				continue
@@ -140,17 +154,17 @@ func main() {
 					name = fmt.Sprintf("%s/%s", dt.Format("2006/01/02"), it.Slug)
 				}
 			}
-			err = os.MkdirAll(filepath.Join(OUTPUT_PATH, k, name), 0750)
+			err = os.MkdirAll(filepath.Join(outdir, k, name), 0750)
 			if err != nil {
 				log.Fatalf("could not create dir: %v", err)
 			}
-			fmt.Println("created dir", filepath.Join(OUTPUT_PATH, k, name))
+			fmt.Println("created dir", filepath.Join(outdir, k, name))
 
-			f, err := os.Create(filepath.Join(OUTPUT_PATH, k, name, "index.md"))
+			f, err := os.Create(filepath.Join(outdir, k, name, "index.md"))
 			if err != nil {
 				log.Fatalf("could not create file: %v", err)
 			}
-			err = it.toMarkdown(f)
+			err = renderer.toMarkdown(it, f)
 			if err != nil {
 				log.Println("could not write post: ", err)
 			}
@@ -164,11 +178,11 @@ func main() {
 			}
 
 			if len(it.Comments) > 0 {
-				f, err := os.Create(filepath.Join(OUTPUT_PATH, k, name, "comments.html"))
+				f, err := os.Create(filepath.Join(outdir, k, name, "comments.html"))
 				if err != nil {
 					log.Fatalf("could not create file: %v", err)
 				}
-				err = renderThreads(f, threadComments(it.Comments))
+				err = renderer.renderThreads(f, threadComments(it.Comments))
 				if err != nil {
 					log.Println("ayyyyssss", err)
 				}
@@ -185,13 +199,73 @@ func main() {
 	}
 }
 
+// threadComments takes a list of comments, sorts through their
+// family tree using the `ParentID` and `ID` attributes, and converts them
+// to a list of threads where each node has its Children threads
+//
+// NOTE: assumes the comments form a tree
+func threadComments(comments []comment) []commentThread {
+	roots := make([]commentThread, 0, len(comments))
+	for _, c := range comments {
+		if c.ParentID == 0 {
+			roots = append(roots, threadCommentLevel(c, comments))
+		}
+	}
+
+	return roots
+}
+
+func threadCommentLevel(node comment, comments []comment) commentThread {
+	var threads []commentThread
+	for _, c := range comments {
+		if c.ParentID == node.ID {
+			threads = append(threads, threadCommentLevel(c, comments))
+		}
+	}
+	var re commentThread
+	re.comment = node
+	re.Children = threads
+	return re
+}
+
+func substituteMediaRoot(content string) string {
+	replacer := strings.NewReplacer("http://plazamoyua.files.wordpress.com", "http://localhost:1313/media",
+		":cry:", "😥",
+		":shock:", "😯",
+		":grin:", "😀",
+		":razz:", "😛",
+		":P", "😛",
+		":)", "🙂",
+		";)", "😉",
+		":wink:", "😉",
+		":lol:", "😆",
+		":arrow:", "➡",
+		":twisted:", "😈",
+		":idea:", "💡",
+		":evil:", "👿",
+		":oops:", "😳",
+		":roll:", "🙄")
+	return replacer.Replace(content)
+}
+
+// contentRenderer contains methods to transform and render the XML content
+// into other formats
+type contentRenderer struct {
+	transformContent func(string) string
+}
+
+func escapeTitleQuotes(s string) string {
+	r := strings.NewReplacer("\"", "\\\"")
+	return r.Replace(s)
+}
+
 // toMarkdown adds a Hugo/jekyll front matter and displays a post/page as
 // markdown
-func (i item) toMarkdown(writer io.Writer) error {
+func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 	var content string
 	for _, enc := range i.Encodeds {
 		if enc.XMLName.Space == "http://purl.org/rss/1.0/modules/content/" {
-			content = enc.Data
+			content = cr.transformContent(enc.Data)
 		}
 	}
 
@@ -204,7 +278,7 @@ func (i item) toMarkdown(writer io.Writer) error {
 		Content string
 		Slug    string
 	}{
-		Title:   i.Title,
+		Title:   escapeTitleQuotes(i.Title),
 		PubDate: i.PubDate,
 		Author:  i.Author,
 		Content: content,
@@ -213,7 +287,7 @@ func (i item) toMarkdown(writer io.Writer) error {
 
 	t, err := tt.Parse(`
 ---
-title: "{{.Title | html }}"
+title: "{{.Title }}"
 date: "{{.PubDate}}"
 author: "{{.Author}}"
 slug: "{{.Slug}}"
@@ -227,66 +301,11 @@ slug: "{{.Slug}}"
 	return t.Execute(writer, d)
 }
 
-// threadComments takes a list of comments, sorts through their
-// family tree using the `ParentID` and `ID` attributes, and converts them
-// to a list of threads where each node has its Children threads
-//
-// NOTE: assumes the comments form a tree
-func threadComments(comments []comment) []commentThread {
-	roots := make([]commentThread, 0, len(comments))
-	for _, c := range comments {
-		if c.ParentId == 0 {
-			roots = append(roots, threadCommentLevel(c, comments))
-		}
-	}
-
-	return roots
-}
-
-func threadCommentLevel(node comment, comments []comment) commentThread {
-	var threads []commentThread
-	for _, c := range comments {
-		if c.ParentId == node.Id {
-			threads = append(threads, threadCommentLevel(c, comments))
-		}
-	}
-	var re commentThread
-	re.comment = node
-	re.Children = threads
-	return re
-}
-
-func commentsToHTML(writer io.Writer, comments []comment) error {
-
-	var tt template.Template
-	t, err := tt.Parse(`
-	<li>
-	<div>
-		<span>{{.AuthorName}}</span>
-		<span>{{.Id}} < {{.ParentId}}</span>
-		<div>
-		{{.Content}}
-		</div>
-	</div>
-	</li>`)
-	if err != nil {
-		log.Fatalf("bad template: %v", err)
-	}
-
-	for _, cm := range comments {
-		err = t.Execute(writer, cm)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // threadToHTML renders a single thread as HTML, starting a new
-// sub ordered-list fore each generation
+// sub ordered-list fore each parent/child generation
 // NOTE: Markdown could accomodate this too, but being whitespace-sensitive,
-// this makes it an inconvenient choice. HTML proves the better format for code-gen
-func threadToHTML(thread commentThread) (template.HTML, error) {
+// this makes it an inconvenient choice. HTML is the better format for code-gen
+func (cr contentRenderer) threadToHTML(thread commentThread) (template.HTML, error) {
 	t, err := template.New("tpl").Parse(`
 	<li>
 	<div class="comment">
@@ -313,6 +332,7 @@ func threadToHTML(thread commentThread) (template.HTML, error) {
 
 	if len(thread.Children) == 0 {
 		buffer := bytes.Buffer{}
+		thread.Content = template.HTML(cr.transformContent((string(thread.Content))))
 		err = t.Execute(&buffer, thread)
 		if err != nil {
 			return "", err
@@ -321,7 +341,7 @@ func threadToHTML(thread commentThread) (template.HTML, error) {
 	}
 
 	for _, child := range thread.Children {
-		ht, err := threadToHTML(child)
+		ht, err := cr.threadToHTML(child)
 		if err != nil {
 			return "", err
 		}
@@ -338,13 +358,13 @@ func threadToHTML(thread commentThread) (template.HTML, error) {
 
 // renderThreads goes overa all the comment threads and renders them to the
 // appropriate writer/file/buffer
-func renderThreads(writer io.Writer, comments []commentThread) error {
+func (cr contentRenderer) renderThreads(writer io.Writer, comments []commentThread) error {
 	_, err := writer.Write([]byte("<div class=\"comments\"><ul>\n"))
 	if err != nil {
 		return err
 	}
 	for _, c := range comments {
-		ht, err := threadToHTML(c)
+		ht, err := cr.threadToHTML(c)
 		if err != nil {
 			return err
 		}
