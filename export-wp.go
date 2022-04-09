@@ -144,7 +144,7 @@ func main() {
 	}
 
 	for k, items := range itemsByKind {
-		if k == "attachment" {
+		if k == "attachment" || k == "nav_menu_item" {
 			continue
 		}
 		fmt.Println(k, len(items))
