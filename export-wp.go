@@ -24,20 +24,30 @@ type rss struct {
 // item is the place where posts, pages and attachments are represented
 type item struct {
 	XMLName       xml.Name
-	Title         string    `xml:"title"`
-	Link          string    `xml:"link"`
-	PubDate       string    `xml:"pubDate"`
-	Author        string    `xml:"creator"`       // space: dc
-	PostDate      string    `xml:"post_date"`     // space: wp
-	Slug          string    `xml:"post_name"`     // space: wp
-	PostDateGMT   string    `xml:"post_date_gmt"` // space: wp
-	Encodeds      []encoded `xml:"encoded"`       // space: content
-	PostMeta      postMeta  `xml:"postmeta"`
-	Comments      []comment `xml:"comment"`
-	ID            int       `xml:"post_id"`
-	CommentStatus string    `xml:"comment_status"`
-	PostParent    int       `xml:"post_parent"`
-	PostType      string    `xml:"post_type"`
+	Title         string     `xml:"title"`
+	Link          string     `xml:"link"`
+	PubDate       string     `xml:"pubDate"`
+	Author        string     `xml:"creator"`       // space: dc
+	PostDate      string     `xml:"post_date"`     // space: wp
+	Slug          string     `xml:"post_name"`     // space: wp
+	PostDateGMT   string     `xml:"post_date_gmt"` // space: wp
+	Encodeds      []encoded  `xml:"encoded"`       // space: content
+	PostMeta      postMeta   `xml:"postmeta"`
+	Comments      []comment  `xml:"comment"`
+	ID            int        `xml:"post_id"`
+	CommentStatus string     `xml:"comment_status"`
+	PostParent    int        `xml:"post_parent"`
+	PostType      string     `xml:"post_type"`
+	Status        string     `xml:"status"` // space: wp
+	Categories    []category `xml:"category"`
+}
+
+// category represents a category or tag
+type category struct {
+	XMLName  xml.Name
+	Domain   string `xml:"domain,attr"`
+	NiceName string `xml:"nicename,attr"`
+	Data     string `xml:",cdata"`
 }
 
 // encoded represents the payload of an Item - may be content/excerpt
@@ -134,9 +144,9 @@ func main() {
 	}
 
 	for k, items := range itemsByKind {
-		// if k == "attachment" {
-		// 	continue
-		// }
+		if k == "attachment" {
+			continue
+		}
 		fmt.Println(k, len(items))
 		err := os.Mkdir(filepath.Join(outdir, k), 0750)
 		if err != nil {
@@ -230,6 +240,8 @@ func threadCommentLevel(node comment, comments []comment) commentThread {
 
 func substituteMediaRoot(content string) string {
 	replacer := strings.NewReplacer("http://plazamoyua.files.wordpress.com", "http://localhost:1313/media",
+		"http://plazamoyua.com", "http://localhost:1313",
+		"http://plazamoyua.wordpress.com", "http://localhost:1313",
 		":cry:", "😥",
 		":shock:", "😯",
 		":grin:", "😀",
@@ -271,18 +283,47 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 
 	var tt textTpl.Template
 
+	var (
+		tags       []string
+		categories []string
+	)
+	for _, ct := range i.Categories {
+		switch ct.Domain {
+		case "category":
+			categories = append(categories, ct.NiceName)
+		case "post_tag":
+			tags = append(tags, ct.NiceName)
+		default:
+			continue
+		}
+	}
+
+	var categoriesLine, tagsLine string
+	if len(categories) > 0 {
+		categoriesLine = fmt.Sprintf(`categories: ["%s"]`, strings.Join(categories, "\", \""))
+	}
+	if len(tags) > 0 {
+		tagsLine = fmt.Sprintf(`tags: ["%s"]`, strings.Join(tags, "\", \""))
+	}
+
 	d := struct {
-		Title   string
-		PubDate string
-		Author  string
-		Content string
-		Slug    string
+		Title          string
+		PubDate        string
+		Author         string
+		Content        string
+		Slug           string
+		Link           string
+		CategoriesLine string
+		TagsLine       string
 	}{
-		Title:   escapeTitleQuotes(i.Title),
-		PubDate: i.PubDate,
-		Author:  i.Author,
-		Content: content,
-		Slug:    i.Slug,
+		Title:          escapeTitleQuotes(i.Title),
+		PubDate:        i.PubDate,
+		Author:         i.Author,
+		Content:        content,
+		Slug:           i.Slug,
+		Link:           i.Link,
+		CategoriesLine: categoriesLine,
+		TagsLine:       tagsLine,
 	}
 
 	t, err := tt.Parse(`
@@ -290,7 +331,10 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 title: "{{.Title }}"
 date: "{{.PubDate}}"
 author: "{{.Author}}"
+original: {{.Link}}
 slug: "{{.Slug}}"
+{{.CategoriesLine}}
+{{.TagsLine}}
 ---
 
 {{.Content}}`)

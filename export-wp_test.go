@@ -84,13 +84,12 @@ func Test_cleanContent(t *testing.T) {
 		t.Errorf("could not convert post to markdown: %v", err)
 	}
 	md := buff.String()
-	if strings.Contains(md, "plazamoyua") {
+	if strings.Contains(md, "plazamoyua.files.wordpress.com") {
 		t.Errorf("should have eliminated media url reference")
 	}
 	if !strings.Contains(md, "http://localhost:1313/media/2007/01/moyua6.jpg") {
 		t.Errorf("should have eliminated media url reference")
 	}
-	// http://plazamoyua.files.wordpress.com/2007/01/moyua6.jpg
 	t.Log(md)
 }
 
@@ -150,8 +149,19 @@ func Test_generateHTMLinMD(t *testing.T) {
 	}
 
 	md := buff.String()
-	if !strings.Contains(md, `"Las plataformas de hielo de la Antártida, estables. Lástima por los \"fans\" de Wilkins."`) {
-		t.Errorf("escaped HTML is unnecessary:")
+
+	extracts := []string{
+		`title: "Las plataformas de hielo de la Antártida, estables. Lástima por los \"fans\" de Wilkins."`,
+		`author: "plazaeme"`,
+		`slug: "las-plataformas-de-hielo-de-la-antartida-estables-lo-siento-por-fans-de-wilkins"`,
+		`categories: ["algoreros", "calentamiento-global", "cambio-climatico"]`,
+		`Científicos de la <em><strong>Western Australia's Curtin University of Technology</strong></em> están usando sensores acústicos,`,
+	}
+
+	for _, extract := range extracts {
+		if !strings.Contains(md, extract) {
+			t.Errorf("missing content: %s", extract)
+		}
 	}
 
 	t.Log(md)
@@ -225,5 +235,49 @@ func Test_renderComments(t *testing.T) {
 		if !strings.Contains(string(html), frag) {
 			t.Errorf("expected to find string %s", frag)
 		}
+	}
+}
+
+func Test_parseCategoriesTags(t *testing.T) {
+	var doc rss
+	err := xml.Unmarshal([]byte(testXML), &doc)
+	if err != nil {
+		log.Fatalf("could not parse xml: %v", err)
+	}
+
+	if len(doc.Items) != 4 {
+		t.Errorf("expected to find 4 items, found %d", len(doc.Items))
+		t.FailNow()
+	}
+
+	if len(doc.Items[3].Categories) != 4 {
+		t.Errorf("expected 4 categories, found %d", len(doc.Items[3].Categories))
+	}
+
+	var tags, cats int
+	for _, ct := range doc.Items[3].Categories {
+		switch ct.Domain {
+		case "category":
+			cats++
+		case "post_tag":
+			tags++
+		default:
+			t.Errorf("unknown domain: %s", ct.Domain)
+		}
+	}
+	if tags != 1 {
+		t.Errorf("expected 1 tag, found %d", tags)
+	}
+	if cats != 3 {
+		t.Errorf("expected 3 categories, found %d", tags)
+	}
+	expected := category{
+		XMLName:  xml.Name{Space: "", Local: "category"},
+		Domain:   "post_tag",
+		NiceName: "cambio-climatico",
+		Data:     "Cambio Climático",
+	}
+	if expected != doc.Items[3].Categories[3] {
+		t.Errorf("unexpected tag: %#v", doc.Items[3].Categories[3])
 	}
 }
