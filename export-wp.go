@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	textTpl "text/template"
 	"time"
@@ -238,6 +239,20 @@ func threadCommentLevel(node comment, comments []comment) commentThread {
 	return re
 }
 
+// linkifyText finds "free" urls in text (i.e. urls not in an <a href=""> context), and
+// puts them inside an <a>
+//
+// Main link matcher regex inspired by
+// https://stackoverflow.com/questions/26561149/golang-regex-to-find-urls-in-a-string
+func linkifyText(in string) (string, error) {
+	re, err := regexp.Compile(`(\s+)((http|ftp|https)://([\w\-_]+(?:(?:\.[\w\-_]+)+))([\w\-\.,@?^=%&amp;:/~\+#]*[\w\-\@?^=%&amp;/~\+#])?)`)
+	if err != nil {
+		return "", err
+	}
+
+	return re.ReplaceAllString(in, `$1<a href="$2">$2</a>`), nil
+}
+
 func substituteMediaRoot(content string) string {
 	replacer := strings.NewReplacer("http://plazamoyua.files.wordpress.com", "http://localhost:1313/media",
 		"http://plazamoyua.com", "http://localhost:1313",
@@ -374,9 +389,14 @@ func (cr contentRenderer) threadToHTML(thread commentThread) (template.HTML, err
 		log.Fatalf("bad template: %v", err)
 	}
 
+	// if possible, make free urls in comments into links
+	linkified, err := linkifyText(string(thread.Content))
+	if err != nil {
+		linkified = string(thread.Content)
+	}
+	thread.Content = template.HTML(cr.transformContent(linkified))
+	buffer := bytes.Buffer{}
 	if len(thread.Children) == 0 {
-		buffer := bytes.Buffer{}
-		thread.Content = template.HTML(cr.transformContent((string(thread.Content))))
 		err = t.Execute(&buffer, thread)
 		if err != nil {
 			return "", err
@@ -391,7 +411,6 @@ func (cr contentRenderer) threadToHTML(thread commentThread) (template.HTML, err
 		}
 		thread.ChildrenHTML = append(thread.ChildrenHTML, ht)
 	}
-	buffer := bytes.Buffer{}
 	err = t.Execute(&buffer, thread)
 	if err != nil {
 		return "", err

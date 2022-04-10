@@ -281,3 +281,32 @@ func Test_parseCategoriesTags(t *testing.T) {
 		t.Errorf("unexpected tag: %#v", doc.Items[3].Categories[3])
 	}
 }
+
+func TestLinkify(t *testing.T) {
+	in := `Y luego pasó a ser esta dirección. Hace poco funcionaba:
+	http://reode.blogspot.com/ y http://spreadsheets.google.com/pub?key=tl4jqSPuZ3CE5wxyDVwjvMA&single=true&gid=0&output=html también,
+	Pero ya no <a href="http://amazon.com">amazon</a>.
+	Creo que era:
+
+http://ciudadanos-nada-mas.blogspot.com/
+Ahora se pueden ver los resultados provisionales con gran comodidad en una hoja de cálculo que ha preparado "Producciones Críticas":
+
+http://spreadsheets.google.com/pub?key=tl4jqSPuZ3CE5wxyDVwjvMA&amp;single=true&amp;gid=0&amp;output=html`
+
+	out, err := linkifyText(in)
+	if err != nil {
+		t.Fatalf("could not linkify: %v", err)
+	}
+	frags := []string{
+		`<a href="http://reode.blogspot.com/">http://reode.blogspot.com/</a> y `,
+		`Pero ya no <a href="http://amazon.com">amazon</a>.`,
+		`<a href="http://ciudadanos-nada-mas.blogspot.com/">http://ciudadanos-nada-mas.blogspot.com/</a>`,
+		`<a href="http://spreadsheets.google.com/pub?key=tl4jqSPuZ3CE5wxyDVwjvMA&amp;single=true&amp;gid=0&amp;output=html">http://spreadsheets.google.com/pub?key=tl4jqSPuZ3CE5wxyDVwjvMA&amp;single=true&amp;gid=0&amp;output=html</a>`,
+	}
+	for _, frag := range frags {
+		if !strings.Contains(out, frag) {
+			t.Errorf("expected to find string %s", frag)
+		}
+	}
+	t.Log(string(out))
+}
