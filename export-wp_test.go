@@ -44,8 +44,8 @@ func Test_parseXML(t *testing.T) {
 		t.FailNow()
 	}
 
-	if doc.Items[0].Encodeds[0].Data != "http://plazamoyua.files.wordpress.com/2007/01/moyua6.jpg" {
-		t.Errorf("unexpected content for item1: %s", doc.Items[0].Encodeds[0].Data)
+	if !strings.Contains(doc.Items[0].Encodeds[0].Data, "http://plazamoyua.files.wordpress.com/2007/01/moyua6.jpg") {
+		t.Errorf("missing content for item1: %s", doc.Items[0].Encodeds[0].Data)
 	}
 	if doc.Items[0].Author != "soil" {
 		t.Errorf("unexpected author for item1: %s", doc.Items[0].Author)
@@ -62,7 +62,6 @@ func Test_parseXML(t *testing.T) {
 }
 
 func Test_cleanContent(t *testing.T) {
-	// http://www.europapress.es/madrid/noticia-ciudadanos-cerca-acuerdo-valia-merino-encabece-lista-ayuntamiento-cerrara-mikel-buesa-20110307173526.html
 	var doc rss
 	err := xml.Unmarshal([]byte(testXML), &doc)
 	if err != nil {
@@ -87,9 +86,21 @@ func Test_cleanContent(t *testing.T) {
 	if strings.Contains(md, "plazamoyua.files.wordpress.com") {
 		t.Errorf("should have eliminated media url reference")
 	}
-	if !strings.Contains(md, "http://localhost:1313/media/2007/01/moyua6.jpg") {
+	if strings.Contains(md, "http://plazamoyua.files.wordpress.com/2007/01/moyua6.jpg") ||
+		!strings.Contains(md, "/media/2007/01/moyua6.jpg") {
 		t.Errorf("should have eliminated media url reference")
 	}
+
+	if strings.Contains(md, "https://plazamoyua.com/category/fertilizacion-co2/") ||
+		!strings.Contains(md, "/categories/fertilizacion-co2/") {
+		t.Errorf("should have converted category reference")
+	}
+
+	if strings.Contains(md, "https://plazamoyua.com/tag/1010/") ||
+		!strings.Contains(md, "/tags/1010/") {
+		t.Errorf("should have converted tag reference")
+	}
+
 	t.Log(md)
 }
 
@@ -154,6 +165,7 @@ func Test_generateHTMLinMD(t *testing.T) {
 		`title: "Las plataformas de hielo de la Antártida, estables. Lástima por los \"fans\" de Wilkins."`,
 		`author: "plazaeme"`,
 		`slug: "las-plataformas-de-hielo-de-la-antartida-estables-lo-siento-por-fans-de-wilkins"`,
+		`url: "/2009/06/16/las-plataformas-de-hielo-de-la-antartida-estables-lo-siento-por-fans-de-wilkins/"`,
 		`categories: ["algoreros", "calentamiento-global", "cambio-climatico"]`,
 		`Científicos de la <em><strong>Western Australia's Curtin University of Technology</strong></em> están usando sensores acústicos,`,
 	}

@@ -54,10 +54,30 @@ func linkifyText(in string) (string, error) {
 	return re.ReplaceAllString(in, `$1<a href="$2">$2</a>`), nil
 }
 
+func cleanLink(link string) string {
+	replacer := strings.NewReplacer("http://plazamoyua.com", "",
+		"http://plazamoyua.wordpress.com", "",
+		"https://plazamoyua.com", "",
+		"https://plazamoyua.wordpress.com", "",
+	)
+	return replacer.Replace(link)
+}
+
 func substituteMediaRoot(content string) string {
-	replacer := strings.NewReplacer("http://plazamoyua.files.wordpress.com", "http://localhost:1313/media",
-		"http://plazamoyua.com", "http://localhost:1313",
-		"http://plazamoyua.wordpress.com", "http://localhost:1313",
+	replacer := strings.NewReplacer("http://plazamoyua.files.wordpress.com", "/media",
+		"https://plazamoyua.files.wordpress.com", "/media",
+		"http://plazamoyua.com/tag/", "/tags/",
+		"http://plazamoyua.wordpress.com/tag/", "/tags/",
+		"http://plazamoyua.com/category/", "/categories/",
+		"http://plazamoyua.wordpress.com/category/", "/categories/",
+		"http://plazamoyua.com/", "/",
+		"http://plazamoyua.wordpress.com/", "/",
+		"https://plazamoyua.com/tag/", "/tags/",
+		"https://plazamoyua.wordpress.com/tag/", "/tags/",
+		"https://plazamoyua.com/category/", "/categories/",
+		"https://plazamoyua.wordpress.com/category/", "/categories/",
+		"https://plazamoyua.com/", "/",
+		"https://plazamoyua.wordpress.com/", "/",
 		":cry:", "😥",
 		":shock:", "😯",
 		":grin:", "😀",
@@ -131,6 +151,7 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 		Link           string
 		CategoriesLine string
 		TagsLine       string
+		URL            string
 	}{
 		Title:          escapeTitleQuotes(i.Title),
 		PubDate:        i.PubDate,
@@ -138,6 +159,7 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 		Content:        content,
 		Slug:           i.Slug,
 		Link:           i.Link,
+		URL:            cleanLink(i.Link),
 		CategoriesLine: categoriesLine,
 		TagsLine:       tagsLine,
 	}
@@ -149,6 +171,7 @@ date: "{{.PubDate}}"
 author: "{{.Author}}"
 original: {{.Link}}
 slug: "{{.Slug}}"
+url: "{{.URL}}"
 {{.CategoriesLine}}
 {{.TagsLine}}
 ---

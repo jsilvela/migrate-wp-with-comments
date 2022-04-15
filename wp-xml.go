@@ -35,7 +35,7 @@ type item struct {
 // category represents a category or tag
 type category struct {
 	XMLName  xml.Name
-	Domain   string `xml:"domain,attr"`
+	Domain   string `xml:"domain,attr"` // values: 'category' / 'post_tag'
 	NiceName string `xml:"nicename,attr"`
 	Data     string `xml:",cdata"`
 }

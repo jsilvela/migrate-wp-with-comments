@@ -64,34 +64,34 @@ func main() {
 		itemsByKind[it.PostType] = append(itemsByKind[it.PostType], it)
 	}
 
-	for k, items := range itemsByKind {
-		if k == "attachment" || k == "nav_menu_item" {
+	for kind, items := range itemsByKind {
+		if kind == "attachment" || kind == "nav_menu_item" {
 			continue
 		}
-		fmt.Println(k, len(items))
-		err := os.Mkdir(filepath.Join(outdir, k), 0750)
+		fmt.Println(kind, len(items))
+		err := os.Mkdir(filepath.Join(outdir, kind), 0750)
 		if err != nil {
 			log.Fatalf("could not create dir: %v", err)
 		}
-		fmt.Println("created dir", filepath.Join(outdir, k))
+		fmt.Println("created dir", filepath.Join(outdir, kind))
 		for _, it := range items {
 			if len(it.Slug) == 0 {
 				continue
 			}
 			name := it.Slug
-			if k == "post" {
+			if kind == "post" {
 				dt, err := time.Parse("2006-01-02 15:04:05", it.PostDate)
 				if err == nil {
 					name = filepath.Join(dt.Format("2006/01/02"), it.Slug)
 				}
 			}
-			err = os.MkdirAll(filepath.Join(outdir, k, name), 0750)
+			err = os.MkdirAll(filepath.Join(outdir, kind, name), 0750)
 			if err != nil {
 				log.Fatalf("could not create dir: %v", err)
 			}
-			fmt.Println("created dir", filepath.Join(outdir, k, name))
+			fmt.Println("created dir", filepath.Join(outdir, kind, name))
 
-			f, err := os.Create(filepath.Join(outdir, k, name, "index.md"))
+			f, err := os.Create(filepath.Join(outdir, kind, name, "index.md"))
 			if err != nil {
 				log.Fatalf("could not create file: %v", err)
 			}
@@ -109,7 +109,7 @@ func main() {
 			}
 
 			if len(it.Comments) > 0 {
-				f, err := os.Create(filepath.Join(outdir, k, name, "comments.html"))
+				f, err := os.Create(filepath.Join(outdir, kind, name, "comments.html"))
 				if err != nil {
 					log.Fatalf("could not create file: %v", err)
 				}
