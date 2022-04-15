@@ -74,7 +74,7 @@ func Test_cleanContent(t *testing.T) {
 	}
 
 	renderer := contentRenderer{
-		transformContent: substituteMediaRoot,
+		transformContent: cleanContent,
 	}
 
 	var buff bytes.Buffer

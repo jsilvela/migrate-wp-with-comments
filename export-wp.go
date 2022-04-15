@@ -49,7 +49,7 @@ func main() {
 	}
 
 	renderer := contentRenderer{
-		transformContent: substituteMediaRoot,
+		transformContent: cleanContent,
 	}
 
 	fmt.Println("read items:", len(doc.Items))

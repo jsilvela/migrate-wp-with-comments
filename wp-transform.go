@@ -54,6 +54,7 @@ func linkifyText(in string) (string, error) {
 	return re.ReplaceAllString(in, `$1<a href="$2">$2</a>`), nil
 }
 
+// cleanLink makes self-links potable for use in site page URL's
 func cleanLink(link string) string {
 	replacer := strings.NewReplacer("http://plazamoyua.com", "",
 		"http://plazamoyua.wordpress.com", "",
@@ -63,7 +64,10 @@ func cleanLink(link string) string {
 	return replacer.Replace(link)
 }
 
-func substituteMediaRoot(content string) string {
+// cleanContent scrubs content text
+//  - make self-references portable
+//  - substitute emoticon shortcodes for actual emoticon Unicodes
+func cleanContent(content string) string {
 	replacer := strings.NewReplacer("http://plazamoyua.files.wordpress.com", "/media",
 		"https://plazamoyua.files.wordpress.com", "/media",
 		"http://plazamoyua.com/tag/", "/tags/",
@@ -159,7 +163,7 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 		Content:        content,
 		Slug:           i.Slug,
 		Link:           i.Link,
-		URL:            cleanLink(i.Link),
+		URL:            cleanLink(i.Link) + "index.html",
 		CategoriesLine: categoriesLine,
 		TagsLine:       tagsLine,
 	}
