@@ -163,7 +163,7 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 		Content:        content,
 		Slug:           i.Slug,
 		Link:           i.Link,
-		URL:            cleanLink(i.Link) + "index.html",
+		URL:            cleanLink(i.Link),
 		CategoriesLine: categoriesLine,
 		TagsLine:       tagsLine,
 	}
