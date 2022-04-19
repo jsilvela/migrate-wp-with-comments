@@ -17,22 +17,25 @@ import (
 //
 // NOTE: assumes the comments form a tree
 func threadComments(comments []comment) []commentThread {
-	roots := make([]commentThread, 0, len(comments))
-	for _, c := range comments {
-		if c.ParentID == 0 {
-			roots = append(roots, threadCommentLevel(c, comments))
+	commentsWithParentID := make(map[int][]comment)
+	for _, cm := range comments {
+		if cm.Approved != "trash" {
+			commentsWithParentID[cm.ParentID] = append(commentsWithParentID[cm.ParentID], cm)
 		}
+	}
+
+	roots := make([]commentThread, 0, len(commentsWithParentID[0]))
+	for _, c := range commentsWithParentID[0] {
+		roots = append(roots, threadCommentLevel(c, commentsWithParentID))
 	}
 
 	return roots
 }
 
-func threadCommentLevel(node comment, comments []comment) commentThread {
-	var threads []commentThread
-	for _, c := range comments {
-		if c.ParentID == node.ID {
-			threads = append(threads, threadCommentLevel(c, comments))
-		}
+func threadCommentLevel(node comment, commentsWithParentID map[int][]comment) commentThread {
+	threads := make([]commentThread, len(commentsWithParentID[node.ID]))
+	for i, c := range commentsWithParentID[node.ID] {
+		threads[i] = threadCommentLevel(c, commentsWithParentID)
 	}
 	var re commentThread
 	re.comment = node
@@ -146,7 +149,7 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 		tagsLine = fmt.Sprintf(`tags: ["%s"]`, strings.Join(tags, "\", \""))
 	}
 
-	d := struct {
+	data := struct {
 		Title          string
 		PubDate        string
 		Author         string
@@ -168,6 +171,11 @@ func (cr contentRenderer) toMarkdown(i item, writer io.Writer) error {
 		TagsLine:       tagsLine,
 	}
 
+	if !strings.Contains(data.URL, data.Slug) {
+		data.URL = data.Slug
+		fmt.Printf("WARN: disregarding item URL %s, using slug: %s\n", data.URL, data.Slug)
+	}
+
 	t, err := tt.Parse(`
 ---
 title: "{{.Title }}"
@@ -185,7 +193,7 @@ url: "{{.URL}}"
 	if err != nil {
 		return err
 	}
-	return t.Execute(writer, d)
+	return t.Execute(writer, data)
 }
 
 // threadToHTML renders a single thread as HTML, starting a new

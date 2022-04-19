@@ -68,7 +68,7 @@ type metaValue struct {
 // Space: wp
 type comment struct {
 	XMLName        xml.Name
-	Approved       string        `xml:"comment_approved"`
+	Approved       string        `xml:"comment_approved"` // may be: 1, trash
 	AuthorName     string        `xml:"comment_author"`
 	AuthorEmail    string        `xml:"comment_author_email"`
 	AuthorURL      string        `xml:"comment_author_url"`

@@ -78,6 +78,9 @@ func main() {
 			if len(it.Slug) == 0 {
 				continue
 			}
+			if it.Status == "trash" || it.Status == "trashed" || it.Status == "draft" {
+				continue
+			}
 			name := it.Slug
 			if kind == "post" {
 				dt, err := time.Parse("2006-01-02 15:04:05", it.PostDate)
