@@ -32,7 +32,9 @@ func threadComments(comments []comment) []commentThread {
 	return roots
 }
 
-func threadCommentLevel(node comment, commentsWithParentID map[int][]comment) commentThread {
+func threadCommentLevel(
+	node comment, commentsWithParentID map[int][]comment,
+) commentThread {
 	threads := make([]commentThread, len(commentsWithParentID[node.ID]))
 	for i, c := range commentsWithParentID[node.ID] {
 		threads[i] = threadCommentLevel(c, commentsWithParentID)

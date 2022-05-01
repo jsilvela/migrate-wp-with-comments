@@ -1,8 +1,8 @@
 # Export WordPress to Hugo preserving comment threads
 
 Yet another WordPress-to-Hugo export tool, but one which serves comment threads
-statically using Hugo, instead of relying on disqus or other
-external comment software.
+statically using Hugo, instead of relying on disqus or other external comment
+software.
 
 Written from scratch in Go.
 
@@ -30,7 +30,7 @@ This tool will build a tree data structure with the comment threads, and write
 them into an HTML file, using unordered lists to build display hierarchies.
 This HTML file can then be embedded into the page content.
 
-A page with comments can be represented as:
+A typical page with comments will be represented like so:
 
 ``` sh
 post/my-post/
@@ -38,20 +38,27 @@ post/my-post/
   comments.html
 ```
 
-Then, an appropriate **layout** can combine the contents:
+This tool takes care of generating the directories and the two files within
+them.
+
+Then, an appropriate Hugo **layout** can combine the contents:
 
 ``` html
 <main>
-    …
+  …
 	{{ .Content }}
-    <hr/>
-    {{ with .Resources.GetMatch "comments.html" }}
-        {{ .Content | safeHTML }}
-    {{ end }}
+  <hr/>
+  {{ with .Resources.GetMatch "comments.html" }}
+      {{ .Content | safeHTML }}
+  {{ end }}
 </main>
 ```
 
 Please refer to [hugo documentation.](https://gohugo.io/templates/lookup-order/)
+
+I've written a [blog post](https://blog.silvela.org/post/2022-04-30-comment-threads/)
+to expand on the internals. I've found that comment threading makes a good
+showcase for Computer Science fundamentals.
 
 ## Why?
 
