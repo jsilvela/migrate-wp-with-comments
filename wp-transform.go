@@ -39,10 +39,10 @@ func threadCommentLevel(
 	for i, c := range commentsWithParentID[node.ID] {
 		threads[i] = threadCommentLevel(c, commentsWithParentID)
 	}
-	var re commentThread
-	re.comment = node
-	re.Children = threads
-	return re
+	return commentThread{
+		comment:  node,
+		Children: threads,
+	}
 }
 
 // linkifyText finds "free" urls in text (i.e. urls not in an <a href=""> context), and
